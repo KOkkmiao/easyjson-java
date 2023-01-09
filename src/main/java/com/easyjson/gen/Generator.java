@@ -1,16 +1,22 @@
 package com.easyjson.gen;
 
+import cn.hutool.core.io.IoUtil;
+import cn.hutool.core.lang.Pair;
 import com.easyjson.annotation.PreKnowGeneric;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.hash.HashCode;
-import com.oracle.tools.packager.IOUtils;
-import com.sun.tools.javac.util.Pair;
+import sun.misc.IOUtils;
+import sun.nio.ch.IOUtil;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -74,14 +80,14 @@ public class Generator {
 //            genStructUnmarshaler(targetClass);
         }
         Pair<PrintStream, Long> printStreamLongPair = printHeader();
-        PrintStream printStream =printStreamLongPair.fst;
+        PrintStream printStream =printStreamLongPair.getKey();
         out.flush();
         out.close();
-        printStream.write(IOUtils.readFully(new File(fileName)));
+        IoUtil.copy(Files.newInputStream(Paths.get(fileName)),printStream);
         printStream.println("}");
         printStream.flush();
         printStream.close();
-        IOUtils.copyFile(new File("tmp-"+fileName+printStreamLongPair.snd),new File(fileName));
+        IoUtil.copy(Files.newInputStream(Paths.get("tmp-"+fileName+printStreamLongPair.getValue())),Files.newOutputStream(Paths.get(fileName)));
     }
 
     private Pair<PrintStream,Long> printHeader() throws FileNotFoundException {
@@ -98,7 +104,7 @@ public class Generator {
         //print class info
         printStream.println("public class "+fileName+"{");
 
-        return Pair.of(printStream,hashCode.asLong());
+        return new Pair<>(printStream,hashCode.asLong());
     }
 
     public void genDecoder(Class t) {
