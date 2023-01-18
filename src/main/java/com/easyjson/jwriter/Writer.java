@@ -22,7 +22,7 @@ public class Writer {
     }
 
     public void string(String target) {
-        this.buffer.append(target);
+        this.buffer.append('"'+target+'"');
     }
 
     public void Long(Long target) {
@@ -57,7 +57,10 @@ public class Writer {
         this.buffer.append(target);
     }
     public void RawString(String target){
-        string(target);
+        this.buffer.append(target);
+    }
+    public void subLastDot(){
+        buffer.delete(buffer.length()-1,buffer.length());
     }
     public String toJson(){
         return this.buffer.toString();
