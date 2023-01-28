@@ -62,6 +62,12 @@ public class Writer {
     public void subLastDot(){
         buffer.delete(buffer.length()-1,buffer.length());
     }
+
+    public void Bool(Boolean bool){this.buffer.append(bool);}
+    public void bool(boolean bool){this.buffer.append(bool);}
+    public void writeByte(Byte b){this.buffer.append(b);}
+    public void writebyte(byte b){this.buffer.append(b);}
+    public void writeShort(short b){this.buffer.append(b);}
     public String toJson(){
         return this.buffer.toString();
     }

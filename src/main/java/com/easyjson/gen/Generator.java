@@ -2,29 +2,19 @@ package com.easyjson.gen;
 
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.lang.Pair;
-import com.easyjson.annotation.PreKnowGeneric;
+import com.easyjson.util.ClassDecompiler;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.google.common.hash.HashCode;
-import sun.misc.IOUtils;
-import sun.nio.ch.IOUtil;
+import com.google.googlejavaformat.java.Formatter;
+import com.google.googlejavaformat.java.FormatterException;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.PrintStream;
+import java.io.*;
 import java.lang.reflect.Field;
-import java.lang.reflect.TypeVariable;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static com.easyjson.gen.Encoder.PrimitiveEncoders;
 
 /**
  * @Author: author
@@ -60,46 +50,56 @@ public class Generator {
     Map<Class, Boolean> typesSeen = new HashMap<>();
 
     // types that encoders were requested for (e.g. by encoders of other types)
-    LinkedList<Object> typesUnseen = new LinkedList<>();
+    LinkedList<Class> typesUnseen = new LinkedList<>();
 
     Map<Class,Boolean> typeUnseenDuplicate  = new HashMap<>();
     // function name to relevant type maps to track names of de-/encoders in
     // case of a name clash or unnamed structs
     Map<String, Class> functionNames = new HashMap<>();
 
+    Encoder encoder;
     public Generator(String fileName) throws FileNotFoundException {
         this.fileName = fileName;
         HashCode hashCode = HashCode.fromLong(fileName.hashCode());
         this.hashString = hashCode.toString();
     }
 
-    public void run() throws IOException, IllegalAccessException {
+    public void run() throws IOException, IllegalAccessException, FormatterException {
         if (Strings.isNullOrEmpty(filePath)) {
             URL resource = typesUnseen.getFirst().getClass().getResource("./");
             this.filePath = resource.getPath();
         }
         this.out = new PrintStream(filePath + File.separator +fileName);
+        this.encoder = new Encoder(this);
         while (!typesUnseen.isEmpty()) {
-            Object targetClass = typesUnseen.poll();
-            typesSeen.put(targetClass.getClass(), true);
+            Class targetClass = typesUnseen.poll();
+            typesSeen.put(targetClass, true);
             //            genDecoder(targetClass);
-            genEncoder(targetClass);
-            if (!this.marshalers.containsKey(targetClass.getClass())) {
+            encoder.genEncoder(targetClass);
+            if (!this.marshalers.containsKey(targetClass)) {
                 continue;
             }
-            genStructMarshaler(targetClass.getClass());
+            genStructMarshaler(targetClass);
             //            genStructUnmarshaler(targetClass);
         }
         Pair<PrintStream, Long> printStreamLongPair = printHeader();
         PrintStream printStream = printStreamLongPair.getKey();
         out.flush();
         out.close();
-        IoUtil.copy(Files.newInputStream(Paths.get(fileName)), printStream);
+        IoUtil.copy(Files.newInputStream(Paths.get(filePath + File.separator +fileName)), printStream);
         printStream.println("}");
         printStream.flush();
         printStream.close();
-        IoUtil.copy(Files.newInputStream(Paths.get("tmp-" + fileName + printStreamLongPair.getValue())),
-                Files.newOutputStream(Paths.get(fileName)));
+        String read = IoUtil.read(Files.newInputStream(Paths.get("tmp-" + fileName + printStreamLongPair.getValue())),
+                "utf-8");
+        String formattedSource = new Formatter().formatSource(read);
+        OutputStream outputStream = Files.newOutputStream(Paths.get(filePath + File.separator + fileName + ".java"));
+        outputStream.write(formattedSource.getBytes());
+        outputStream.flush();
+        outputStream.close();
+    }
+    public String GetJSONFieldName(Class t, Field f) {
+        return this.fieldNamer.GetJSONFieldName(t,f);
     }
 
     private Pair<PrintStream, Long> printHeader() throws FileNotFoundException {
@@ -110,9 +110,8 @@ public class Generator {
         printStream.println("package " + pkgName + ";");
         printStream.println();
         printStream.println("import com.easyjson.jwriter.Writer;");
-        imports.forEach((k, v) -> {
-            printStream.println("import " + v + ";");
-        });
+        printStream.println("import com.fasterxml.jackson.databind.util.StdDateFormat;");
+        imports.forEach((k, v) -> printStream.println("import " + v + ";"));
         printStream.println();
         //print class info
         printStream.println("public class " + fileName + "{");
@@ -136,227 +135,48 @@ public class Generator {
 
     }
 
-    public void genEncoder(Object t) throws IllegalAccessException {
-        if (List.class.isAssignableFrom(t.getClass()) || Map.class.isAssignableFrom(t.getClass()) || t.getClass()
-                .isArray()) {
-            genSliceArrayMapEncoder(t);
-        } else {
-            genStructEncoder(t);
-        }
-    }
 
-    public void genSliceArrayMapEncoder(Object t) {
-
-    }
-
-    public void genStructEncoder(Object t) throws IllegalAccessException {
-        String fName = getEncoderName(t.getClass());
-        String type = getType(t.getClass());
-        out.println("public static void " + fName + "(Writer out ," + type + " in){");
-        out.println("  out.RawByte('{');");
-        out.println("  boolean first = true;");
-        List<Field> fs = getStructFields(t.getClass());
-        boolean firstCondition = true;
-        for (int i = 0; i < fs.size(); i++) {
-            firstCondition = genStructFieldEncoder(t.getClass(), fs.get(i), i == 0, firstCondition, fs.get(i).get(t));
-        }
-        //        if hasUnknownsMarshaler(t) { 暂定不写
-        //            if !firstCondition {
-        //                fmt.Fprintln(g.out, "  in.MarshalUnknowns(out, false)")
-        //            } else {
-        //                fmt.Fprintln(g.out, "  in.MarshalUnknowns(out, first)")
-        //            }
-        //        }
-        out.println("  out.RawByte('}');");
-        out.println("}");
-    }
-
-    public boolean genStructFieldEncoder(Class t, Field f, boolean firstFiled, boolean firstCondition, Object o) {
-        String jsonName = this.fieldNamer.GetJSONFieldName(t, f);
-        AnnotationInfo annotationInfo = parseFieldAnnotation(f, o);
-        boolean toggleFirstCondition = firstCondition;
-        boolean noOmitEmpty = !omitEmpty;
-        if (noOmitEmpty) {
-            out.println("{");
-            toggleFirstCondition = false;
-        } else {
-            out.println("if(" + notEmptyCheck(f, "in." + concatGetFiled(f.getName())) + "){");
-        }
-        if (firstCondition) {
-            out.printf("String prefix = %s;\n",concatQuote(","+concatQuoteDouble(  jsonName )+ " :"));
-            if (firstFiled) {
-                if (omitEmpty) {
-                    out.println("   first = false");
-                }
-                out.println("out.RawString(prefix.substring(1));");
-            } else {
-                out.println("   if (first){");
-                out.println("      first = false;");
-                out.println("out.RawString(prefix.substring(1));");
-                out.println("} else {");
-                out.println("      out.RawString(prefix);");
-                out.println("}");
-            }
-        } else {
-            out.printf("String prefix = %s;\n",concatQuote( ","+concatQuoteDouble( jsonName )+ " :"));
-            out.println("      out.RawString(prefix);");
-        }
-        genTypeEncoder(f.getType(), "in." + concatGetFiled(f.getName()), annotationInfo, 2, omitEmpty, o);
-        out.println("}");
-        return toggleFirstCondition;
-    }
-
-    private AnnotationInfo parseFieldAnnotation(Field f, Object o) {
+    public AnnotationInfo parseFieldAnnotation(Field f, Class o) {
 
         AnnotationInfo annotationInfo = new AnnotationInfo();
         if (Collection.class.isAssignableFrom(f.getType())) {
-            Collection o1 = (Collection) o;
-            Object value = o1.iterator().next();
-            if (value != null) {
-                annotationInfo.setlK(value.getClass());
-            }
+            annotationInfo.setlK(ClassDecompiler.readClassCollection(f.getName(),o));
         } else if (Map.class.isAssignableFrom(f.getType())) {
-            Map o1 = (Map) o;
-            Map.Entry<Object, Object> next = (Map.Entry<Object, Object>) o1.entrySet().iterator().next();
-            annotationInfo.setlK(next.getKey().getClass());
-            annotationInfo.setmV(next.getValue().getClass());
+            Pair<Class, Class> classClassPair = ClassDecompiler.readClassMap(f.getName(), o);
+            annotationInfo.setlK(classClassPair.getKey());
+            annotationInfo.setmV(classClassPair.getValue());
         } else if (f.getType().isArray()) {
             annotationInfo.setArray(true);
-            Object[] o1 = (Object[]) o;
-            annotationInfo.setlK(o1[0].getClass());
+            annotationInfo.setlK(ClassDecompiler.readClassArray(f.getName(),o));
         } else {
-            annotationInfo.setNormal(o.getClass());
+            annotationInfo.setNormal(f.getType());
         }
 
         return annotationInfo;
     }
 
-    private void genTypeEncoder(Class t, String in, AnnotationInfo o, int indent, boolean assumeNonEmpty,
-            Object target) {
-        //todo 可扩展用户自定的序列化类
-        genTypeEncoderNoCheck(t, in, o, indent, assumeNonEmpty, target);
-    }
-
-    private void genTypeEncoderNoCheck(Class t, String in, AnnotationInfo o, int indent, boolean assumeNonEmpty,
-            Object target) {
-        String ws = addIndent(indent);
-        if (PrimitiveEncoders.containsKey(t)) {
-            out.printf(ws + PrimitiveEncoders.get(t) + "\n", in);
-            return;
-        }
-        if (Collection.class.isAssignableFrom(t)) {
-            String iVar = uniqueVarName();
-            if (!assumeNonEmpty) {
-                out.println(ws + "if (" + in + " == null) {");
-                out.println(ws + "  out.RawString(\"null\");");
-                out.println(ws + "} else {");
-            } else {
-                out.println(ws + "{");
-            }
-            out.println(ws + "  out.RawByte('[');");
-            out.println(ws + "  for (int "+ iVar + " = 0;" + iVar + "<" + in + ".size();" + iVar + "++){");
-            out.println(ws + "    if (" + iVar + " > 0) {");
-            out.println(ws + "      out.RawByte(',');");
-            out.println(ws + "   }");
-
-            genTypeEncoder(o.getlK(),
-                    in + ".get(" + iVar + ")",
-                    o,
-                    indent + 2,
-                    false,
-                    ((Collection) target).iterator().next());
-
-            out.println(ws + "  }");
-            out.println(ws + "  out.RawByte(']');");
-            out.println(ws + "}");
-            return;
-        }
-        if (Map.class.isAssignableFrom(t)) {
-            Class key = o.getlK();
-            Class value = o.getmV();
-
-            String keyEnc = PrimitiveEncoders.get(key);
-
-            String tmpVar = uniqueVarName();
-
-            if (!assumeNonEmpty) {
-                out.println(ws + "if(" + in + " == null) {");
-                out.println(ws + "  out.RawString(\"null\");");
-                out.println(ws + "} else {");
-            } else {
-                out.println(ws + "{");
-            }
-            out.println(ws + "  out.RawByte('{');");
-            out.println(ws + in + ".forEach((" + tmpVar + "Name," + tmpVar + "Value)-> {");
-
-            Map o1 = (Map) target;
-            Map.Entry<Object, Object> next = (Map.Entry<Object, Object>) o1.entrySet().iterator().next();
-            if (keyEnc != null && keyEnc.length() > 0) {
-                out.println(ws + "    " + String.format(keyEnc, tmpVar + "Name"));
-            } else {
-                genTypeEncoder(key, tmpVar + "Name", o, indent + 2, false, next.getKey());
-            }
-
-            out.println(ws + "    out.RawByte(':');");
-
-            genTypeEncoder(value, tmpVar + "Value", o, indent + 2, false, next.getValue());
-            out.println(ws+"out.RawByte(',');");
-            out.println(ws + " });");
-            // 截取最后一个字符
-            out.println(ws+"out.subLastDot();");
-            out.println(ws + "  }");
-            out.println(ws + "  out.RawByte('}');");
-            return;
-        }
-        if (t.isArray()) {
-            Class lk = o.getlK();
-            String iVar = uniqueVarName();
-            out.println(ws + "out.RawByte('[')");
-            out.println(ws + "  for (;" + iVar + "<" + in + ".length;" + iVar + "++;){");
-            out.println(ws + "    if (" + iVar + " > 0) {");
-            out.println(ws + "      out.RawByte(',')");
-            out.println(ws + "   }");
-            genTypeEncoder(lk,
-                    "(" + in + ")[" + iVar + "]",
-                    o,
-                    indent + 2,
-                    false,
-                    ((Collection) target).iterator().next());
-            out.println(ws + "}");
-            out.println(ws + "out.RawByte(']')");
-            return;
-        }
-        if (Object.class.isAssignableFrom(t)) {
-            String encName = getEncoderName(t);
-            addType(target);
-            out.println(ws + encName + "(out," + in + ");");
-            return;
-        }
-        throw new IllegalArgumentException(String.format("%s", t.getName()));
-    }
-
-    public void add(Object t) {
+    public void add(Class t) {
         addType(t);
-        marshalers.put(t.getClass(), true);
+        marshalers.put(t, true);
     }
 
-    private void addType(Object t) {
-        if (typesSeen.containsKey(t.getClass())) {
+    public void addType(Class t) {
+        if (typesSeen.containsKey(t)) {
             return;
         }
-        if (typeUnseenDuplicate.containsKey(t.getClass())) {
+        if (typeUnseenDuplicate.containsKey(t)) {
             return;
         }
         typesUnseen.addLast(t);
-        typeUnseenDuplicate.put(t.getClass(),true);
+        typeUnseenDuplicate.put(t,true);
     }
 
-    private String uniqueVarName() {
+    public String uniqueVarName() {
         varCounter++;
         return "v" + varCounter;
     }
 
-    private String notEmptyCheck(Field f, String v) {
+    public String notEmptyCheck(Field f, String v) {
         String template = "Objects.nonNull(" + v + ") && ";
         if (String.class.isAssignableFrom(f.getClass())) {
             return template + v + ".length() > 0";
@@ -373,16 +193,6 @@ public class Generator {
         return template.substring(0, template.length() - 3);
     }
 
-    public String concatGetFiled(String name) {
-        return "get" + name.substring(0, 1).toUpperCase() + name.substring(1) + "()";
-    }
-
-    public String concatQuote(String str) {
-        return "\"" + str + "\"";
-    }
-    public String concatQuoteDouble(String str) {
-        return "\\\"" + str + "\\\"";
-    }
     public String addIndent(int indent) {
         StringBuilder builder = new StringBuilder("  ");
         for (int i = 0; i < indent; i++) {
@@ -391,16 +201,6 @@ public class Generator {
         return builder.toString();
     }
 
-    public List<Field> getStructFields(Class t) {
-        List<Field> fields = Arrays.asList(t.getDeclaredFields());
-        Class clazz = t;
-        while ((clazz = clazz.getSuperclass()) != null) {
-            Field[] declaredFields1 = clazz.getDeclaredFields();
-            fields.addAll(Arrays.asList(declaredFields1));
-        }
-        fields.forEach(field -> field.setAccessible(true));
-        return fields;
-    }
 
     public String getEncoderName(Class t) {
         return functionNames("endcode", t);
@@ -544,5 +344,12 @@ public class Generator {
         }
 
     }
-
+    public static void main(String[] args) throws Exception {
+        // Generator listSearchJson = new Generator("ListSearchJson");
+        // listSearchJson.add(ListSearchResponseType.class);
+        // listSearchJson.setPkgName("com.ctrip.flight.dom.engine.coresearch.service");
+        // listSearchJson.setFilePath("D:\\Users\\xpmiao\\IdeaProjects\\flightcoresearch\\coresearch\\coresearch-service"
+        //         + "\\src\\main\\java\\com\\ctrip\\flight\\dom\\engine\\coresearch\\service");
+        // listSearchJson.run();
+    }
 }

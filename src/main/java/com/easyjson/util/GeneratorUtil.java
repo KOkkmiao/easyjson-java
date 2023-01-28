@@ -3,11 +3,7 @@ package com.easyjson.util;
 
 
 import cn.hutool.core.lang.Pair;
-import com.alibaba.fastjson.JSON;
-import com.easyjson.gen.Generator;
-
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -15,7 +11,7 @@ import java.util.List;
  * @date 2023/1/18
  */
 public class GeneratorUtil {
-    private List<Pair<String,Class>> encodeJson;
+    private List<Pair<String,Class>> encodeJson = new ArrayList();
 
     private String fileName;
     private String filePath;
@@ -31,16 +27,6 @@ public class GeneratorUtil {
         this.filePath = filePath;
     }
     public void build()  {
-        try {
-            Generator generator = new Generator(fileName);
-            for (Pair<String, Class> classPair : encodeJson) {
-                generator.add(JSON.parseObject(classPair.getKey(),classPair.getValue()));
-            }
-            generator.setFilePath(filePath);
-            generator.run();
-        } catch (IOException | IllegalAccessException e) {
-            throw new RuntimeException(e);
-        }
 
     }
     public static void main(String[] args) {
