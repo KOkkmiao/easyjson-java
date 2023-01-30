@@ -90,7 +90,7 @@ public class Encoder {
             out.printf("String prefix = %s;\n",concatQuote(","+concatQuoteDouble(  jsonName )+ " :"));
             if (firstFiled) {
                 if (this.generator.omitEmpty) {
-                    out.println("   first = false");
+                    out.println("   first = false;");
                 }
                 out.println("out.RawString(prefix.substring(1));");
             } else {

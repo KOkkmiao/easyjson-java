@@ -111,6 +111,7 @@ public class Generator {
         printStream.println();
         printStream.println("import com.easyjson.jwriter.Writer;");
         printStream.println("import com.fasterxml.jackson.databind.util.StdDateFormat;");
+        printStream.println("import java.util.Objects;");
         imports.forEach((k, v) -> printStream.println("import " + v + ";"));
         printStream.println();
         //print class info
@@ -309,8 +310,18 @@ public class Generator {
             return annotation.value();
         }
     }
-
-
+    public void setNoStdMarshalers(boolean noStdMarshalers) {
+        this.noStdMarshalers = noStdMarshalers;
+    }
+    public void setOmitEmpty(boolean omitEmpty) {
+        this.omitEmpty = omitEmpty;
+    }
+    public void setDisallowUnknownFields(boolean disallowUnknownFields) {
+        this.disallowUnknownFields = disallowUnknownFields;
+    }
+    public void setFieldNamer(FieldNamer fieldNamer) {
+        this.fieldNamer = fieldNamer;
+    }
     class AnnotationInfo {
         private Class normal;
         private Class mV;

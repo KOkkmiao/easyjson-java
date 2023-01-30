@@ -1,8 +1,12 @@
 package com.easyjson.jwriter;
 
+import com.fasterxml.jackson.core.io.JsonStringEncoder;
+
 import java.math.BigDecimal;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @Author: author
@@ -11,7 +15,7 @@ import java.nio.ByteBuffer;
  * @Version: 1.0
  */
 public class Writer {
-    StringBuilder buffer = new StringBuilder();
+    StringBuilder buffer = new StringBuilder(691777);
 
     public void integer(Integer target) {
         this.buffer.append(target);
@@ -22,7 +26,9 @@ public class Writer {
     }
 
     public void string(String target) {
-        this.buffer.append('"'+target+'"');
+        this.buffer.append('"');
+        char[] chars = JsonStringEncoder.getInstance().quoteAsString(target);
+        this.buffer.append('"');
     }
 
     public void Long(Long target) {
