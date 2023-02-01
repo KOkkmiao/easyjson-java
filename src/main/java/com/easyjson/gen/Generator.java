@@ -97,6 +97,8 @@ public class Generator {
         outputStream.write(formattedSource.getBytes());
         outputStream.flush();
         outputStream.close();
+        new File(filePath + File.separator +fileName).delete();
+        new File("tmp-" + fileName + printStreamLongPair.getValue()).delete();
     }
     public String GetJSONFieldName(Class t, Field f) {
         return this.fieldNamer.GetJSONFieldName(t,f);

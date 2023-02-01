@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
  */
 public class Encoder {
     public static Map<Class,String> PrimitiveEncoders = new HashMap<>();
+    public static Map<Class,String> PrimitiveStrEncoders = new HashMap<>();
     static {
         init();
     }
@@ -41,7 +42,7 @@ public class Encoder {
         String fName = getEncoderName(t);
         String type = this.generator.getType(t);
         out.println("private static void " + fName + "(Writer out ," + type + " in){");
-        out.println("  out.RawByte('{');");
+        out.println("  out.RawChar('{');");
         out.println("  boolean first = true;");
         List<Field> fs = getStructFields(t);
         boolean firstCondition = true;
@@ -55,7 +56,7 @@ public class Encoder {
         //                fmt.Fprintln(g.out, "  in.MarshalUnknowns(out, first)")
         //            }
         //        }
-        out.println("  out.RawByte('}');");
+        out.println("  out.RawChar('}');");
         out.println("}");
     }
     public String getEncoderName(Class t) {
@@ -131,10 +132,10 @@ public class Encoder {
             } else {
                 out.println(ws + "{");
             }
-            out.println(ws + "  out.RawByte('[');");
+            out.println(ws + "  out.RawChar('[');");
             out.println(ws + "  for (int "+ iVar + " = 0;" + iVar + "<" + in + ".size();" + iVar + "++){");
             out.println(ws + "    if (" + iVar + " > 0) {");
-            out.println(ws + "      out.RawByte(',');");
+            out.println(ws + "      out.RawChar(',');");
             out.println(ws + "   }");
 
             genTypeEncoder(o.getlK(),
@@ -144,7 +145,7 @@ public class Encoder {
                     false);
 
             out.println(ws + "  }");
-            out.println(ws + "  out.RawByte(']');");
+            out.println(ws + "  out.RawChar(']');");
             out.println(ws + "}");
             return;
         }
@@ -163,7 +164,7 @@ public class Encoder {
             } else {
                 out.println(ws + "{");
             }
-            out.println(ws + "  out.RawByte('{');");
+            out.println(ws + "  out.RawChar('{');");
             out.println(ws + in + ".forEach((" + tmpVar + "Name," + tmpVar + "Value)-> {");
 
 
@@ -173,24 +174,24 @@ public class Encoder {
                 genTypeEncoder(key, tmpVar + "Name", o, indent + 2, false);
             }
 
-            out.println(ws + "    out.RawByte(':');");
+            out.println(ws + "    out.RawChar(':');");
 
             genTypeEncoder(value, tmpVar + "Value", o, indent + 2, false);
-            out.println(ws+"out.RawByte(',');");
+            out.println(ws+"out.RawChar(',');");
             out.println(ws + " });");
             // 截取最后一个字符
             out.println(ws+"out.subLastDot();");
             out.println(ws + "  }");
-            out.println(ws + "  out.RawByte('}');");
+            out.println(ws + "  out.RawChar('}');");
             return;
         }
         if (t.isArray()) {
             Class lk = o.getlK();
             String iVar = this.generator.uniqueVarName();
-            out.println(ws + "out.RawByte('[')");
+            out.println(ws + "out.RawChar('[')");
             out.println(ws + "  for (;" + iVar + "<" + in + ".length;" + iVar + "++;){");
             out.println(ws + "    if (" + iVar + " > 0) {");
-            out.println(ws + "      out.RawByte(',');");
+            out.println(ws + "      out.RawChar(',');");
             out.println(ws + "   }");
             genTypeEncoder(lk,
                     "(" + in + ")[" + iVar + "]",
@@ -198,7 +199,7 @@ public class Encoder {
                     indent + 2,
                     false);
             out.println(ws + "}");
-            out.println(ws + "out.RawByte(']');");
+            out.println(ws + "out.RawChar(']');");
             return;
         }
         if (Date.class.isAssignableFrom(t)) {
@@ -241,15 +242,29 @@ public class Encoder {
         PrimitiveEncoders.put(Long.class,"out.Long(%s);");
         PrimitiveEncoders.put(long.class,"out.Long(%s);");
         PrimitiveEncoders.put(Float.class,"out.Float(%s);");
-        PrimitiveEncoders.put(float.class,"out.float(%s);");
+        PrimitiveEncoders.put(float.class,"out.Float(%s);");
         PrimitiveEncoders.put(Double.class,"out.Double(%s);");
-        PrimitiveEncoders.put(double.class,"out.double(%s);");
+        PrimitiveEncoders.put(double.class,"out.Double(%s);");
         PrimitiveEncoders.put(BigDecimal.class,"out.bigDecimal(%s);");
         PrimitiveEncoders.put(boolean.class,"out.bool(%s);");
-        PrimitiveEncoders.put(Boolean.class,"out.Bool(%s);");
-        PrimitiveEncoders.put(byte.class,"out.writebyte(%s);");
+        PrimitiveEncoders.put(Boolean.class,"out.bool(%s);");
+        PrimitiveEncoders.put(byte.class,"out.writeByte(%s);");
         PrimitiveEncoders.put(Byte.class,"out.writeByte(%s);");
         PrimitiveEncoders.put(short.class,"out.writeShort(%s);");
 
+        PrimitiveStrEncoders.put(Integer.class,"out.integerStr(%s);");
+        PrimitiveStrEncoders.put(int.class,"out.integerStr(%s);");
+        PrimitiveStrEncoders.put(Long.class,"out.LongStr(%s);");
+        PrimitiveStrEncoders.put(long.class,"out.LongStr(%s);");
+        PrimitiveStrEncoders.put(Float.class,"out.FloatStr(%s);");
+        PrimitiveStrEncoders.put(float.class,"out.FloatStr(%s);");
+        PrimitiveStrEncoders.put(Double.class,"out.DoubleStr(%s);");
+        PrimitiveStrEncoders.put(double.class,"out.DoubleStr(%s);");
+        PrimitiveStrEncoders.put(BigDecimal.class,"out.bigDecimalStr(%s);");
+        PrimitiveStrEncoders.put(boolean.class,"out.boolStr(%s);");
+        PrimitiveStrEncoders.put(Boolean.class,"out.boolStr(%s);");
+        PrimitiveStrEncoders.put(byte.class,"out.writeByteStr(%s);");
+        PrimitiveStrEncoders.put(Byte.class,"out.writeByteStr(%s);");
+        PrimitiveStrEncoders.put(short.class,"out.writeShortStr(%s);");
     }
 }

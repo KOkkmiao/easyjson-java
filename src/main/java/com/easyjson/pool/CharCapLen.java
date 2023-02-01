@@ -1,9 +1,11 @@
 package com.easyjson.pool;
 
+import java.lang.reflect.Array;
+
 public class CharCapLen {
     char[] value;
-    int capacity;
-    int len;
+    volatile int capacity;
+    volatile int len;
     public CharCapLen(int capacity) {
         this.value = new char[capacity];
         this.capacity = capacity;
@@ -16,13 +18,15 @@ public class CharCapLen {
         this.value[this.len++] = ch;
     }
     public void append(char[] ch) {
-        for (char c : ch) {
-            this.value[this.len++] = c;
-        }
+        System.arraycopy(ch, 0, this.value, len, ch.length);
+        this.len += ch.length;
+    }
+    public void append(char[] ch,int src,int srcLen) {
+        System.arraycopy(ch, src, this.value, len,srcLen);
+        this.len += srcLen;
     }
     public void append(String str) {
-        for (int i = 0; i < str.length(); i++) {
-            this.value[this.len++] = str.charAt(i);
-        }
+        str.getChars(0, str.length(), this.value, len);
+        this.len += str.length();
     }
 }
